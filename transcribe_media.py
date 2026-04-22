@@ -1,6 +1,29 @@
 import subprocess
 import sys
 from pathlib import Path
+import spacy
+
+nlp = spacy.load("ru_core_news_sm")
+
+def smart_paragraphs(text: str, max_sents_per_para: int = 4) -> str:
+    doc = nlp(text)
+    sentences = [sent.text.strip() for sent in doc.sents if sent.text.strip()]
+
+    paragraphs = []
+    current_para = []
+
+    for sent in sentences:
+        # Если параграф уже достаточно большой, сохраняем и начинаем новый
+        if len(current_para) >= max_sents_per_para:
+            paragraphs.append(" ".join(current_para))
+            current_para = []
+
+        current_para.append(sent)
+
+    if current_para:
+        paragraphs.append(" ".join(current_para))
+
+    return "\n\n".join(paragraphs)
 
 
 def ensure_python_package(import_name: str, pip_name: str) -> None:
@@ -107,6 +130,7 @@ def parse_cli_args() -> tuple[str, str, float]:
 
 def main() -> None:
     ensure_python_package("numpy", "numpy")
+    ensure_python_package("spacy", "spacy")
     ensure_python_package("whisper", "openai-whisper")
     ensure_python_package("imageio_ffmpeg", "imageio-ffmpeg")
 
@@ -125,11 +149,13 @@ def main() -> None:
     result = model.transcribe(audio, fp16=False)
     print(f"Detected language: {result.get('language', 'unknown')}")
     transcription_text = result["text"].strip()
-    print(transcription_text)
+    
+    paragraphed_text = smart_paragraphs(transcription_text)
+    print(paragraphed_text)
 
     output_path = Path(output_file)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(transcription_text, encoding="utf-8")
+    output_path.write_text(paragraphed_text, encoding="utf-8")
     print(f"Saved transcription to: {output_path}")
 
 
