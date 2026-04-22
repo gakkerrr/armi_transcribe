@@ -11,27 +11,15 @@ def ensure_python_package(import_name: str, pip_name: str) -> None:
         subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name])
 
 
-def select_model_name() -> str:
-    # VRAM-based model selection for CUDA GPUs.
-    # Thresholds are conservative to reduce out-of-memory risks.
-    try:
-        import torch  # Imported lazily to avoid mandatory dependency before install.
-    except ImportError:
+def select_model_name(memory_gb: float) -> str:
+    # User-provided memory in GB controls model choice.
+    if memory_gb >= 15:
+        return "large"
+    if memory_gb >= 6:
+        return "medium"
+    if memory_gb >= 4:
         return "small"
-
-    if torch.cuda.is_available():
-        total_vram_bytes = torch.cuda.get_device_properties(0).total_memory
-        total_vram_gb = total_vram_bytes / (1024**3)
-
-        if total_vram_gb >= 15:
-            return "large"
-        if total_vram_gb >= 6:
-            return "medium"
-        if total_vram_gb >= 4:
-            return "small"
-        return "base"
-
-    return "small"
+    return "base"
 
 
 def load_audio_with_imageio_ffmpeg(input_path: str, sample_rate: int = 16000):
@@ -104,11 +92,17 @@ def maybe_convert_video_to_mp3(input_path: str) -> tuple[str, bool]:
     return str(cached_mp3_path), True
 
 
-def parse_cli_args() -> tuple[str, str]:
-    if len(sys.argv) != 3:
+def parse_cli_args() -> tuple[str, str, float]:
+    if len(sys.argv) != 4:
         script_name = Path(sys.argv[0]).name
-        raise SystemExit(f"Usage: python {script_name} <input_file> <output_file>")
-    return sys.argv[1], sys.argv[2]
+        raise SystemExit(
+            f"Usage: python {script_name} <input_file> <output_file> <memory_gb>"
+        )
+    try:
+        memory_gb = float(sys.argv[3])
+    except ValueError as exc:
+        raise SystemExit("memory_gb must be a number, e.g. 16") from exc
+    return sys.argv[1], sys.argv[2], memory_gb
 
 
 def main() -> None:
@@ -118,11 +112,11 @@ def main() -> None:
 
     import whisper
 
-    model_name = select_model_name()
+    input_file, output_file, memory_gb = parse_cli_args()
+    model_name = select_model_name(memory_gb)
     print(f"Selected model: {model_name}")
     model = whisper.load_model(model_name)
 
-    input_file, output_file = parse_cli_args()
     prepared_audio_path, input_was_video = maybe_convert_video_to_mp3(input_file)
     if input_was_video:
         print(f"Audio source for transcription: {prepared_audio_path}")
