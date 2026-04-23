@@ -28,6 +28,8 @@
 
 В сmd:
 
+`pip install spacy`
+
 `python -m spacy download ru_core_news_sm`
 
 ### 3) Клонировать проект
